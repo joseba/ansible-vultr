@@ -40,9 +40,9 @@ class Driver(object):
 
         return servers
 
-    def server_create(self, label, vpsplanid, osid, dcid, sshkeyid, enable_private_network, enable_backups):
-        data = {'label': label, 'VPSPLANID': vpsplanid, 'OSID': osid, 'DCID': dcid,
-                'SSHKEYID': sshkeyid, 'enable_private_network': self.yn(enable_private_network),
+    def server_create(self, label, vpsplanid, osid, dcid, sshkeyid, scriptid, enable_private_network, enable_backups):
+        data = {'label': label, 'hostname': label, 'VPSPLANID': vpsplanid, 'OSID': osid, 'DCID': dcid,
+                'SSHKEYID': sshkeyid, 'SCRIPTID': scriptid, 'enable_private_network': self.yn(enable_private_network),
                 enable_backups: self.yn(enable_backups)}
 
         r = requests.post(self.API_BASE_URL + '/server/create', params={'api_key': self.API_KEY}, data=data)
@@ -159,8 +159,8 @@ class Server:
         return False
 
     @classmethod
-    def add(cls, label, VPSPLANID, OSID, DCID, SSHKEYID=None, enable_private_network=False, enable_backups=False):
-        json = driver.server_create(label, VPSPLANID, OSID, DCID, SSHKEYID, enable_private_network, enable_backups)
+    def add(cls, label, VPSPLANID, OSID, DCID, SSHKEYID=None, SCRIPTID=None, enable_private_network=False, enable_backups=False):
+        json = driver.server_create(label, VPSPLANID, OSID, DCID, SSHKEYID, SCRIPTID, enable_private_network, enable_backups)
         return cls(json)
 
 def core(module):
@@ -196,6 +196,7 @@ def core(module):
                     OSID=getkeyordie('OSID'),
                     DCID=getkeyordie('DCID'),
                     SSHKEYID=module.params['SSHKEYID'],
+                    SCRIPTID=module.params['SCRIPTID'],
                     enable_private_network=module.params['enable_private_network'],
                     enable_backups=module.params['enable_backups'],
                 )
@@ -237,6 +238,7 @@ def main():
             OSID = dict(type='int'),
             DCID = dict(type='int'),
             SSHKEYID = dict(default=''),
+            SCRIPTID = dict(default=''),
             enable_private_network = dict(type='bool', default='no'),
             enable_backups = dict(type='bool', default='no'),
             unique_label = dict(aliases=['unique_name'], type='bool', default='yes'),

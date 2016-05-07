@@ -1,0 +1,4 @@
+[vultr]
+api_key=YOUR_API_KEY
+ssh_keyid=YOUR_SSH_KEY_ID
+script_id=YOUR_SCRIPT_ID

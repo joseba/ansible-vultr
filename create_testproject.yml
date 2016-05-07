@@ -1,0 +1,87 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    project: "testproject"
+    api_key: "{{ lookup('ini', 'api_key section=vultr file=~/master.ini') }}"
+    ssh_keyid: "{{ lookup('ini', 'ssh_keyid section=vultr file=~/master.ini') }}"
+    script_id: "{{ lookup('ini', 'script_id section=vultr file=~/master.ini') }}"
+    servers:
+      - { label: "srv01",  group: "db" }
+      - { label: "srv02",  group: "db" }
+      - { label: "srv03",  group: "web" }
+
+  tasks:
+    - name: Provision Vultr servers
+      vultr:
+        command: server
+        api_key: "{{ api_key }}"
+        state: "{{ item.state | default('present') }}"
+        label: "{{ item.label }}"
+        DCID: "{{ item.DCID | default(25) }}" # Tokyo
+        VPSPLANID: "{{ item.VPSPLANID | default(106) }}" # 1024MB / 20GB SSD
+        OSID: "{{ item.OSID | default(167) }}" # CentOS 7x64
+        SSHKEYID: "{{ item.ssh_keyid | default(ssh_keyid) }}"
+        SCRIPTID: "{{ item.script_id | default(script_id) }}"
+        enable_private_network: yes
+        unique_label: yes
+      register: created_servers
+      with_items: "{{ servers }}"
+    # ------------------------------------------------
+    # - Append servers to corresponding groups
+    # ------------------------------------------------
+    - name: Add Vultr hosts to inventory groups
+      add_host:
+        name: "{{ item.1.server.main_ip }}"
+        groups: "project,{{ servers[item.0].group }},{{ item.1.server.label }}"
+        label: "{{ item.1.server.label }}"
+        internal_ip: "{{ item.1.server.internal_ip }}"
+      when: item.1.server is defined
+      with_indexed_items: "{{created_servers.results}}"
+    # ------------------------------------------------
+    # - Prepare hosts file 
+    # ------------------------------------------------
+    - name: Add hosts to project hosts file
+      lineinfile: dest="~/{{project}}.hosts" regexp='.*{{ item.1.server.label }}' line="{{ item.1.server.internal_ip }} {{ item.1.server.label }}" state=present create=yes
+      when: item.1.server is defined
+      with_indexed_items: "{{created_servers.results}}"
+    # ------------------------------------------------
+    # - Prepare ansible inventory for this project
+    # ------------------------------------------------
+    - name: Add groups to project inventory file
+      lineinfile: dest="~/{{project}}.inventory" regexp='^\[{{ servers[item.0].group }}\]' line="[{{ servers[item.0].group }}]" state=present create=yes
+      when: item.1.server is defined
+      with_indexed_items: "{{created_servers.results}}"
+    # ------------------------------------------------
+    # - Prepare ansible inventory for this project
+    # ------------------------------------------------
+    - name: Add hosts to project inventory file
+      lineinfile: dest="~/{{project}}.inventory" regexp='^{{ item.1.server.label }}' insertafter="^\[{{ servers[item.0].group }}\]" line="{{ item.1.server.label }} ansible_ssh_host={{ item.1.server.internal_ip }}" state=present create=yes
+      when: item.1.server is defined
+      with_indexed_items: "{{created_servers.results}}"
+
+- hosts: project
+  remote_user: root
+
+  vars:
+    project: "testproject"
+
+  tasks:
+    - name: Wait for port 22 to become available
+      local_action: "wait_for port=22 host={{ inventory_hostname }}"
+
+    - name: Ping pong all hosts
+      ping:
+
+    - name: Configure /etc/hosts
+      lineinfile: dest="/etc/hosts" regexp='' insertafter=EOF line="{{ lookup('file', '~/{{ project }}.hosts') }}"
+
+    - name: Configure eth1 (private network)
+      template: src=ifcfg-eth1.j2 dest=/etc/sysconfig/network-scripts/ifcfg-eth1
+      register: ifcfg_eth1
+
+    - name: Enable eth1 (private network)
+      service: name=network state=restarted
+      when: ifcfg_eth1.changed
