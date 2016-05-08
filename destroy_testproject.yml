@@ -1,0 +1,23 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    project: "ceph-dc01"
+    api_key: "{{ lookup('ini', 'api_key section=vultr file=~/master.ini') }}"
+    ssh_keyid: "{{ lookup('ini', 'ssh_keyid section=vultr file=~/master.ini') }}"
+    script_id: "{{ lookup('ini', 'script_id section=vultr file=~/master.ini') }}"
+    servers:
+      - { label: "srv01",  group: "db" }
+      - { label: "srv02",  group: "db" }
+      - { label: "srv03",  group: "web" }
+
+  tasks:
+    - name: Provision Vultr servers
+      vultr:
+        command: server
+        api_key: "{{ api_key }}"
+        state: "absent"
+        label: "{{ item.label }}"
+      with_items: "{{ servers }}"
